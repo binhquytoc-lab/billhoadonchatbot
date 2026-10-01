@@ -103,7 +103,7 @@ if "cart" not in st.session_state:
 # =========================================================
 
 st.markdown(
-    '<div class="main-title"> ❤️ QUÁN TRÀ SỮA</div>',
+    '<div class="main-title"> ☕ QUÁN TRÀ SỮA</div>',
     unsafe_allow_html=True
 )
 
