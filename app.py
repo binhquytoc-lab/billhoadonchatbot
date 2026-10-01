@@ -1,18 +1,41 @@
-
+```python
 import streamlit as st
 from datetime import datetime
 import io
-st.image("TRASUA.jpg")
+import requests
+
 
 # =========================================================
 # CẤU HÌNH TRANG
 # =========================================================
 
 st.set_page_config(
-    page_title="Tính Bill Trà Sữa",
+    page_title="Quán Trà Sữa",
     page_icon="🧋",
     layout="centered"
 )
+
+
+# =========================================================
+# API CHATBOT OPENROUTER
+# =========================================================
+
+OPENROUTER_API_KEY = "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"
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# Model chatbot
+MODEL_NAME = "openai/gpt-5"
+
+
+# =========================================================
+# ẢNH QUÁN
+# =========================================================
+
+try:
+    st.image("TRASUA.jpg", use_container_width=True)
+except Exception:
+    pass
 
 
 # =========================================================
@@ -56,6 +79,14 @@ st.markdown("""
     margin-top: 10px;
 }
 
+.chat-box {
+    border: 1px solid #dddddd;
+    border-radius: 12px;
+    padding: 15px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -78,7 +109,10 @@ MENU = {
 }
 
 
-# Giá topping
+# =========================================================
+# GIÁ TOPPING
+# =========================================================
+
 TOPPINGS = {
     "Không topping": 0,
     "Trân châu đen": 5000,
@@ -91,11 +125,255 @@ TOPPINGS = {
 
 
 # =========================================================
-# KHỞI TẠO SESSION STATE
+# SESSION STATE
 # =========================================================
 
 if "cart" not in st.session_state:
     st.session_state.cart = []
+
+
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = [
+        {
+            "role": "assistant",
+            "content": (
+                "Xin chào! 🧋 Tôi là chatbot của Quán Trà Sữa. "
+                "Tôi có thể giúp bạn xem menu, giá đồ uống, giá topping "
+                "và tư vấn lựa chọn trà sữa."
+            )
+        }
+    ]
+
+
+# =========================================================
+# HÀM GỌI CHATBOT AI
+# =========================================================
+
+def ask_chatbot(user_message):
+
+    # -----------------------------------------------------
+    # Tạo thông tin menu cho AI
+    # -----------------------------------------------------
+
+    menu_text = ""
+
+    for drink_name, price in MENU.items():
+        menu_text += f"- {drink_name}: {price:,} VNĐ\n"
+
+
+    # -----------------------------------------------------
+    # Tạo thông tin topping cho AI
+    # -----------------------------------------------------
+
+    topping_text = ""
+
+    for topping_name, price in TOPPINGS.items():
+        topping_text += f"- {topping_name}: {price:,} VNĐ\n"
+
+
+    # -----------------------------------------------------
+    # Thông tin giỏ hàng hiện tại
+    # -----------------------------------------------------
+
+    cart_text = ""
+
+    if len(st.session_state.cart) == 0:
+
+        cart_text = "Hiện tại khách chưa có món nào trong giỏ hàng."
+
+    else:
+
+        cart_text = "Các món hiện đang có trong giỏ hàng:\n"
+
+        for index, item in enumerate(st.session_state.cart):
+
+            cart_text += (
+                f"{index + 1}. "
+                f"{item['drink']} - "
+                f"{item['quantity']} ly - "
+                f"Topping: {item['topping']} - "
+                f"Đường: {item['sugar']} - "
+                f"Đá: {item['ice']} - "
+                f"Thành tiền: {item['total']:,} VNĐ\n"
+            )
+
+
+    # -----------------------------------------------------
+    # SYSTEM PROMPT
+    # -----------------------------------------------------
+
+    system_prompt = f"""
+Bạn là chatbot tư vấn khách hàng cho một quán trà sữa.
+
+Tên quán:
+QUÁN TRÀ SỮA
+
+Địa chỉ:
+Số 504 Đại lộ Bình Dương
+
+Bạn chỉ nên tư vấn dựa trên thông tin menu được cung cấp bên dưới.
+
+MENU:
+{menu_text}
+
+TOPPING:
+{topping_text}
+
+MỨC ĐỘ ĐƯỜNG:
+- 100%
+- 70%
+- 0%
+
+MỨC ĐỘ ĐÁ:
+- 100%
+- 70%
+- 0%
+
+{cart_text}
+
+QUY TẮC:
+
+1. Trả lời bằng tiếng Việt.
+2. Trả lời thân thiện, ngắn gọn, dễ hiểu.
+3. Có thể tư vấn khách nên chọn món nào.
+4. Khi khách hỏi giá, phải dựa đúng vào MENU và TOPPING.
+5. Không được tự bịa thêm món hoặc giá không có trong menu.
+6. Nếu khách hỏi về topping, hãy cho biết giá topping.
+7. Nếu khách hỏi về đường hoặc đá, hãy giải thích các lựa chọn 100%, 70%, 0%.
+8. Nếu khách hỏi tổng tiền trong giỏ hàng, hãy dựa vào thông tin giỏ hàng được cung cấp.
+9. Không tự thực hiện thanh toán.
+10. Không tự thay đổi hóa đơn.
+11. Nếu khách hỏi ngoài phạm vi quán trà sữa, hãy trả lời lịch sự rằng bạn chủ yếu hỗ trợ thông tin về quán.
+12. Không tiết lộ API key hoặc thông tin kỹ thuật của hệ thống.
+"""
+
+
+    # -----------------------------------------------------
+    # LỊCH SỬ CHAT
+    # -----------------------------------------------------
+
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt
+        }
+    ]
+
+
+    # Chỉ gửi tối đa 10 tin nhắn gần nhất
+    recent_messages = st.session_state.chat_messages[-10:]
+
+    for message in recent_messages:
+
+        messages.append(
+            {
+                "role": message["role"],
+                "content": message["content"]
+            }
+        )
+
+
+    # Thêm câu hỏi mới
+    messages.append(
+        {
+            "role": "user",
+            "content": user_message
+        }
+    )
+
+
+    # -----------------------------------------------------
+    # GỌI OPENROUTER
+    # -----------------------------------------------------
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://streamlit.io",
+        "X-Title": "Quán Trà Sữa Chatbot"
+    }
+
+
+    data = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+
+
+    try:
+
+        response = requests.post(
+            OPENROUTER_URL,
+            headers=headers,
+            json=data,
+            timeout=60
+        )
+
+
+        # -------------------------------------------------
+        # KIỂM TRA HTTP
+        # -------------------------------------------------
+
+        if response.status_code != 200:
+
+            try:
+                error_data = response.json()
+
+                error_message = error_data.get(
+                    "error",
+                    {}
+                ).get(
+                    "message",
+                    "Không xác định"
+                )
+
+            except Exception:
+
+                error_message = response.text
+
+
+            return (
+                f"❌ Chatbot gặp lỗi API.\n\n"
+                f"Mã lỗi: {response.status_code}\n\n"
+                f"Chi tiết: {error_message}"
+            )
+
+
+        # -------------------------------------------------
+        # LẤY CÂU TRẢ LỜI
+        # -------------------------------------------------
+
+        result = response.json()
+
+        answer = result["choices"][0]["message"]["content"]
+
+        return answer
+
+
+    except requests.exceptions.Timeout:
+
+        return (
+            "❌ Kết nối chatbot quá thời gian chờ. "
+            "Vui lòng thử lại."
+        )
+
+
+    except requests.exceptions.RequestException as e:
+
+        return (
+            f"❌ Không thể kết nối đến chatbot.\n\n"
+            f"Chi tiết: {str(e)}"
+        )
+
+
+    except Exception as e:
+
+        return (
+            f"❌ Có lỗi xảy ra khi xử lý chatbot.\n\n"
+            f"Chi tiết: {str(e)}"
+        )
 
 
 # =========================================================
@@ -103,19 +381,112 @@ if "cart" not in st.session_state:
 # =========================================================
 
 st.markdown(
-    '<div class="main-title"> ❤️ QUÁN TRÀ SỮA</div>',
+    '<div class="main-title">❤️ QUÁN TRÀ SỮA</div>',
     unsafe_allow_html=True
 )
 
 st.markdown(
-    '<div class="sub-title"> 📍 Số 504 Đại lộ Bình Dương </div>',
+    '<div class="sub-title">📍 Số 504 Đại lộ Bình Dương</div>',
     unsafe_allow_html=True
 )
+
+
+# =========================================================
+# CHATBOT
+# =========================================================
+
+st.divider()
+
+st.subheader("🤖 Chatbot tư vấn khách hàng")
+
+st.caption(
+    "Bạn có thể hỏi chatbot về menu, giá, topping, "
+    "đường, đá hoặc nhờ tư vấn đồ uống."
+)
+
+
+# ---------------------------------------------------------
+# HIỂN THỊ LỊCH SỬ CHAT
+# ---------------------------------------------------------
+
+for message in st.session_state.chat_messages:
+
+    with st.chat_message(message["role"]):
+
+        st.markdown(message["content"])
+
+
+# ---------------------------------------------------------
+# Ô NHẬP CHAT
+# ---------------------------------------------------------
+
+user_message = st.chat_input(
+    "Ví dụ: Trà sữa nào giá 35.000?"
+)
+
+
+if user_message:
+
+    # Hiển thị tin nhắn người dùng
+    st.session_state.chat_messages.append(
+        {
+            "role": "user",
+            "content": user_message
+        }
+    )
+
+
+    with st.chat_message("user"):
+        st.markdown(user_message)
+
+
+    # Gọi AI
+    with st.chat_message("assistant"):
+
+        with st.spinner("🤖 Chatbot đang trả lời..."):
+
+            answer = ask_chatbot(user_message)
+
+            st.markdown(answer)
+
+
+    # Lưu câu trả lời
+    st.session_state.chat_messages.append(
+        {
+            "role": "assistant",
+            "content": answer
+        }
+    )
+
+
+# =========================================================
+# NÚT XÓA LỊCH SỬ CHAT
+# =========================================================
+
+if st.button(
+    "🗑️ Xóa lịch sử chatbot",
+    key="clear_chat"
+):
+
+    st.session_state.chat_messages = [
+        {
+            "role": "assistant",
+            "content": (
+                "Xin chào! 🧋 Tôi là chatbot của Quán Trà Sữa. "
+                "Tôi có thể giúp bạn xem menu, giá đồ uống, "
+                "giá topping và tư vấn lựa chọn trà sữa."
+            )
+        }
+    ]
+
+    st.rerun()
 
 
 # =========================================================
 # THÔNG TIN KHÁCH HÀNG
 # =========================================================
+
+st.divider()
 
 st.subheader("👤 Thông tin khách hàng")
 
@@ -133,12 +504,14 @@ st.subheader("🧋 Chọn món")
 
 col1, col2 = st.columns(2)
 
+
 with col1:
 
     drink = st.selectbox(
         "Loại trà sữa / đồ uống",
         list(MENU.keys())
     )
+
 
     quantity = st.number_input(
         "Số lượng",
@@ -147,6 +520,7 @@ with col1:
         value=1,
         step=1
     )
+
 
     sugar = st.selectbox(
         "Mức độ đường",
@@ -161,6 +535,7 @@ with col2:
         list(TOPPINGS.keys())
     )
 
+
     ice = st.selectbox(
         "Mức độ đá",
         ["100%", "70%", "0%"]
@@ -172,29 +547,41 @@ with col2:
 # =========================================================
 
 drink_price = MENU[drink]
+
 topping_price = TOPPINGS[topping]
 
 unit_price = drink_price + topping_price
+
 item_total = unit_price * quantity
 
+
+# =========================================================
+# THÔNG TIN MÓN
+# =========================================================
 
 st.markdown("### 💰 Thông tin món")
 
 col1, col2, col3 = st.columns(3)
 
+
 with col1:
+
     st.metric(
         "Giá đồ uống",
         f"{drink_price:,} VNĐ"
     )
 
+
 with col2:
+
     st.metric(
         "Giá topping",
         f"{topping_price:,} VNĐ"
     )
 
+
 with col3:
+
     st.metric(
         "Thành tiền",
         f"{item_total:,} VNĐ"
@@ -202,7 +589,7 @@ with col3:
 
 
 # =========================================================
-# NÚT THÊM VÀO HÓA ĐƠN
+# THÊM MÓN
 # =========================================================
 
 if st.button(
@@ -211,7 +598,10 @@ if st.button(
 ):
 
     if not customer_name.strip():
-        st.warning("⚠️ Vui lòng nhập tên khách hàng.")
+
+        st.warning(
+            "⚠️ Vui lòng nhập tên khách hàng."
+        )
 
     else:
 
@@ -227,7 +617,9 @@ if st.button(
             "total": item_total
         }
 
+
         st.session_state.cart.append(item)
+
 
         st.success(
             f"✅ Đã thêm {quantity} ly {drink} vào hóa đơn."
@@ -235,7 +627,7 @@ if st.button(
 
 
 # =========================================================
-# HIỂN THỊ HÓA ĐƠN
+# HÓA ĐƠN
 # =========================================================
 
 st.divider()
@@ -250,13 +642,18 @@ if len(st.session_state.cart) == 0:
         "Hãy chọn món và bấm 'THÊM MÓN VÀO HÓA ĐƠN'."
     )
 
+
 else:
 
     total_bill = 0
 
-    for index, item in enumerate(st.session_state.cart):
+
+    for index, item in enumerate(
+        st.session_state.cart
+    ):
 
         total_bill += item["total"]
+
 
         st.markdown(
             f"""
@@ -309,10 +706,15 @@ else:
 
 
     # =====================================================
-    # NÚT XÓA HÓA ĐƠN
+    # NÚT XÓA / THANH TOÁN
     # =====================================================
 
     col1, col2 = st.columns(2)
+
+
+    # -----------------------------------------------------
+    # XÓA HÓA ĐƠN
+    # -----------------------------------------------------
 
     with col1:
 
@@ -326,9 +728,9 @@ else:
             st.rerun()
 
 
-    # =====================================================
+    # -----------------------------------------------------
     # THANH TOÁN
-    # =====================================================
+    # -----------------------------------------------------
 
     with col2:
 
@@ -337,56 +739,86 @@ else:
             use_container_width=True
         ):
 
-            # Thời gian thanh toán
             payment_time = datetime.now()
 
-            # Tạo nội dung hóa đơn
+
+            # =================================================
+            # TẠO NỘI DUNG HÓA ĐƠN
+            # =================================================
+
             bill_text = ""
 
             bill_text += "========================================\n"
+
             bill_text += "             QUÁN TRÀ SỮA\n"
+
             bill_text += "          HÓA ĐƠN THANH TOÁN\n"
+
             bill_text += "========================================\n\n"
 
-            bill_text += f"Khách hàng: {customer_name}\n"
+
+            bill_text += (
+                f"Khách hàng: {customer_name}\n"
+            )
+
 
             bill_text += (
                 f"Thời gian: "
                 f"{payment_time.strftime('%d/%m/%Y %H:%M:%S')}\n"
             )
 
-            bill_text += "\n"
-            bill_text += "----------------------------------------\n"
 
-            for index, item in enumerate(st.session_state.cart):
+            bill_text += "\n"
+
+            bill_text += (
+                "----------------------------------------\n"
+            )
+
+
+            for index, item in enumerate(
+                st.session_state.cart
+            ):
 
                 bill_text += (
                     f"{index + 1}. {item['drink']}\n"
                 )
 
-                bill_text += (
-                    f"   Số lượng: {item['quantity']} ly\n"
-                )
 
                 bill_text += (
-                    f"   Topping: {item['topping']}\n"
+                    f"   Số lượng: "
+                    f"{item['quantity']} ly\n"
                 )
 
-                bill_text += (
-                    f"   Đường: {item['sugar']}\n"
-                )
 
                 bill_text += (
-                    f"   Đá: {item['ice']}\n"
+                    f"   Topping: "
+                    f"{item['topping']}\n"
                 )
 
-                bill_text += (
-                    f"   Đơn giá: {item['unit_price']:,} VNĐ\n"
-                )
 
                 bill_text += (
-                    f"   Thành tiền: {item['total']:,} VNĐ\n"
+                    f"   Đường: "
+                    f"{item['sugar']}\n"
                 )
+
+
+                bill_text += (
+                    f"   Đá: "
+                    f"{item['ice']}\n"
+                )
+
+
+                bill_text += (
+                    f"   Đơn giá: "
+                    f"{item['unit_price']:,} VNĐ\n"
+                )
+
+
+                bill_text += (
+                    f"   Thành tiền: "
+                    f"{item['total']:,} VNĐ\n"
+                )
+
 
                 bill_text += (
                     "----------------------------------------\n"
@@ -395,22 +827,35 @@ else:
 
             bill_text += "\n"
 
+
             bill_text += (
-                f"TỔNG THANH TOÁN: {total_bill:,} VNĐ\n"
+                f"TỔNG THANH TOÁN: "
+                f"{total_bill:,} VNĐ\n"
             )
 
-            bill_text += "\n"
-
-            bill_text += "Cảm ơn quý khách đã sử dụng dịch vụ!\n"
-
-            bill_text += "Hẹn gặp lại quý khách!\n"
 
             bill_text += "\n"
-            bill_text += "========================================\n"
+
+
+            bill_text += (
+                "Cảm ơn quý khách đã sử dụng dịch vụ!\n"
+            )
+
+
+            bill_text += (
+                "Hẹn gặp lại quý khách!\n"
+            )
+
+
+            bill_text += "\n"
+
+            bill_text += (
+                "========================================\n"
+            )
 
 
             # =================================================
-            # THÔNG BÁO THANH TOÁN
+            # THÔNG BÁO
             # =================================================
 
             st.success(
@@ -420,16 +865,19 @@ else:
 
 
             # =================================================
-            # TẠO FILE HÓA ĐƠN
+            # TẠO FILE
             # =================================================
 
             file_data = io.BytesIO(
                 bill_text.encode("utf-8")
             )
 
+
             filename = (
                 "hoa_don_"
-                + payment_time.strftime("%Y%m%d_%H%M%S")
+                + payment_time.strftime(
+                    "%Y%m%d_%H%M%S"
+                )
                 + ".txt"
             )
 
@@ -441,4 +889,4 @@ else:
                 mime="text/plain",
                 use_container_width=True
             )
-
+```
