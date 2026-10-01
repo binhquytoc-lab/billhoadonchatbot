@@ -17,7 +17,7 @@ st.set_page_config(
 # API CHATBOT GROK (xAI)
 # =========================================================
 
-GROK_API_KEY = "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"
+GROK_API_KEY = "xai-siufUuO0cmuzLyFvgVaVw8Y6q0cLA15QTORFLuOIOUnFL55DcKHJY2odvBFhUWuTP5dsTa30KxPpMygL"
 GROK_URL = "https://api.x.ai/v1/chat/completions"
 
 # Model chuẩn của xAI cho Grok
