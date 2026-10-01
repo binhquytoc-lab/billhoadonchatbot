@@ -2,7 +2,7 @@
 import streamlit as st
 from datetime import datetime
 import io
-
+st.image("TRASUA.jpg")
 
 # =========================================================
 # CẤU HÌNH TRANG
