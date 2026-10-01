@@ -14,14 +14,14 @@ st.set_page_config(
 )
 
 # =========================================================
-# API CHATBOT OPENROUTER
+# API CHATBOT GROK (xAI)
 # =========================================================
 
-OPENROUTER_API_KEY = "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"
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GROK_API_KEY = "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"
+GROK_URL = "https://api.x.ai/v1/chat/completions"
 
-# Model chatbot sử dụng model phổ biến và ổn định
-MODEL_NAME = "openai/gpt-4o-mini"
+# Model chuẩn của xAI cho Grok
+MODEL_NAME = "grok-beta"
 
 # =========================================================
 # ẢNH QUÁN
@@ -121,7 +121,7 @@ if "chat_messages" not in st.session_state:
     ]
 
 # =========================================================
-# HÀM GỌI CHATBOT AI
+# HÀM GỌI CHATBOT AI (GROK)
 # =========================================================
 
 def ask_chatbot(user_message):
@@ -186,10 +186,8 @@ QUY TẮC:
     messages.append({"role": "user", "content": user_message})
 
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://streamlit.io",
-        "X-Title": "Quán Trà Sữa Chatbot"
+        "Authorization": f"Bearer {GROK_API_KEY}",
+        "Content-Type": "application/json"
     }
 
     data = {
@@ -200,7 +198,7 @@ QUY TẮC:
     }
 
     try:
-        response = requests.post(OPENROUTER_URL, headers=headers, json=data, timeout=60)
+        response = requests.post(GROK_URL, headers=headers, json=data, timeout=60)
         
         if response.status_code != 200:
             try:
