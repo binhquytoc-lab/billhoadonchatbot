@@ -103,12 +103,12 @@ if "cart" not in st.session_state:
 # =========================================================
 
 st.markdown(
-    '<div class="main-title">🧋 QUÁN TRÀ SỮA</div>',
+    '<div class="main-title"> ❤️ QUÁN TRÀ SỮA</div>',
     unsafe_allow_html=True
 )
 
 st.markdown(
-    '<div class="sub-title">HỆ THỐNG TÍNH BILL & XUẤT HÓA ĐƠN</div>',
+    '<div class="sub-title"> APP TÍNH BILL HÓA ĐƠN TRÀ SỮA</div>',
     unsafe_allow_html=True
 )
 
