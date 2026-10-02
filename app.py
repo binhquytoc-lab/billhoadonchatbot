@@ -1,6 +1,4 @@
-import os
 from datetime import datetime
-import requests
 import streamlit as st
 
 # ============================================================
@@ -8,20 +6,8 @@ import streamlit as st
 # ============================================================
 
 st.set_page_config(
-    page_title="Trà Sữa - Hóa Đơn & AI Chatbot", page_icon="🧋", layout="wide"
+    page_title="Trà Sữa - Hóa Đơn & Chatbot Tư Vấn", page_icon="🧋", layout="wide"
 )
-
-
-# ============================================================
-# OPENROUTER & API CONFIG
-# ============================================================
-
-# API Key công khai trực tiếp
-OPENROUTER_API_KEY = "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"
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-# Model miễn phí chất lượng cao trên OpenRouter
-AI_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 
 
 # ============================================================
@@ -170,12 +156,12 @@ if "cart" not in st.session_state:
 if "payment_done" not in st.session_state:
     st.session_state.payment_done = False
 
-if "ai_messages" not in st.session_state:
-    st.session_state.ai_messages = []
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
 
 
 # ============================================================
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS & CHATBOT LOGIC
 # ============================================================
 
 
@@ -183,53 +169,78 @@ def format_money(value):
     return f"{value:,} VNĐ"
 
 
-def rule_based_answer(question):
-    """Xử lý trả lời nhanh dựa trên từ khóa luật cứng."""
+def ask_chatbot(question):
+    """Xử lý trả lời tự động dựa trên từ khóa và dữ liệu của quán."""
     q = question.lower().strip()
 
+    # Chào hỏi
     if any(x in q for x in ["xin chào", "chào", "hello", "hi"]):
-        return "Xin chào 👋 Tôi có thể tư vấn về menu, giá, topping và size cho bạn!"
+        return "Xin chào 👋 Tôi là trợ lý ảo của quán trà sữa! Tôi có thể giúp bạn xem menu, tra cứu giá, chọn size, topping hoặc gợi ý món theo sở thích."
 
+    # Hỏi món đắt nhất
     if any(x in q for x in ["cao nhất", "đắt nhất", "mắc nhất"]):
         max_price = max(MENU.values())
         products = [name for name, price in MENU.items() if price == max_price]
-        return f"Loại có giá cao nhất: {', '.join(products)} - {format_money(max_price)}."
+        return f"🏆 Loại có giá cao nhất là: **{', '.join(products)}** - {format_money(max_price)}."
 
+    # Hỏi món rẻ nhất
     if any(x in q for x in ["rẻ nhất", "thấp nhất"]):
         min_price = min(MENU.values())
         products = [name for name, price in MENU.items() if price == min_price]
-        return f"Loại có giá thấp nhất: {', '.join(products)} - {format_money(min_price)}."
+        return f"🏷️ Loại có giá thấp nhất là: **{', '.join(products)}** - {format_money(min_price)}."
 
+    # Topping đắt/rẻ
     if "topping" in q and any(x in q for x in ["đắt nhất", "cao nhất"]):
         max_price = max(TOPPINGS.values())
         toppings = [
             name for name, price in TOPPINGS.items() if price == max_price
         ]
-        return f"Topping có giá cao nhất: {', '.join(toppings)} - {format_money(max_price)}."
+        return f"✨ Topping có giá cao nhất: **{', '.join(toppings)}** - {format_money(max_price)}."
 
     if "topping" in q and any(x in q for x in ["rẻ nhất", "thấp nhất"]):
         min_price = min(TOPPINGS.values())
         toppings = [
             name for name, price in TOPPINGS.items() if price == min_price
         ]
-        return f"Topping có giá thấp nhất: {', '.join(toppings)} - {format_money(min_price)}."
+        return f"✨ Topping có giá thấp nhất: **{', '.join(toppings)}** - {format_money(min_price)}."
 
+    # Hỏi về Size
     if "size" in q:
-        return "🥤 Giá phụ thu Size:\n\n• Size S: không phụ thu\n• Size M: +5.000 VNĐ\n• Size L: +10.000 VNĐ"
+        return "🥤 **Giá phụ thu Size:**\n\n• Size S: không phụ thu (giá gốc)\n• Size M: +5.000 VNĐ\n• Size L: +10.000 VNĐ"
 
+    # Gợi ý theo vị ngọt/thanh
     if any(x in q for x in ["ngọt", "uống ngọt"]):
         return (
-            f"🍫 Nhóm vị ngọt nổi bật gồm: {', '.join(SWEET_DRINKS)}.\n\n"
-            "Bạn có thể chọn 70% hoặc 100% đường để tận hưởng trọn vị ngọt nhé!"
+            f"🍫 **Nhóm trà sữa vị đậm đà & ngọt thơm:** {', '.join(SWEET_DRINKS)}.\n\n"
+            "💡 *Mẹo:* Bạn có thể chọn 70% hoặc 100% đường để cảm nhận trọn vẹn vị ngọt nhé!"
         )
 
     if any(
-        x in q for x in ["ít ngọt", "không ngọt", "ít đường", "thanh", "chua"]
+        x in q for x in ["ít ngọt", "không ngọt", "ít đường", "thanh", "chua", "mát"]
     ):
         return (
-            f"🍋 Nhóm trà vị nhẹ & thanh gồm: {', '.join(LIGHT_DRINKS)}.\n\n"
-            "Bạn có thể chọn 30% hoặc 0% đường nhé!"
+            f"🍋 **Nhóm trà trái cây thanh nhẹ & giải nhiệt:** {', '.join(LIGHT_DRINKS)}.\n\n"
+            "💡 *Mẹo:* Bạn có thể chọn 30% hoặc 0% đường nếu muốn uống ít ngọt."
         )
+
+    # Tư vấn theo ngân sách (Ví dụ: "có 50k", "50000", "40k")
+    import re
+    numbers = re.findall(r"\d+", q)
+    if numbers and any(k in q for k in ["đồng", "k", "tiền", "ngân sách", "có"]):
+        budget = int(numbers[0])
+        if budget < 1000:
+            budget *= 1000  # Ví dụ "50k" -> 50000
+
+        suitable = []
+        for name, price in MENU.items():
+            if price <= budget:
+                rem = budget - price
+                suitable.append(f"• **{name}** ({format_money(price)}) - còn thừa {format_money(rem)} để thêm topping!")
+        
+        if suitable:
+            return f"💰 Với **{format_money(budget)}**, bạn có thể gọi các món sau:\n\n" + "\n".join(suitable[:5])
+        else:
+            return f"😅 Với **{format_money(budget)}**, hiện chưa có món nào vừa ngân sách (món thấp nhất là {format_money(min(MENU.values()))})."
 
     # Tìm sản phẩm cụ thể
     selected_product = next(
@@ -237,98 +248,33 @@ def rule_based_answer(question):
     )
     if selected_product:
         price = MENU[selected_product]
-        if any(x in q for x in ["giá", "bao nhiêu", "tiền"]):
-            return (
-                f"🧋 **{selected_product}**:\n\n"
-                f"• Size S: {format_money(price)}\n"
-                f"• Size M: {format_money(price + 5000)}\n"
-                f"• Size L: {format_money(price + 10000)}"
-            )
-        if any(x in q for x in ["topping", "ăn kèm", "dùng kèm", "hợp"]):
-            recs = TOPPING_RECOMMENDATIONS.get(selected_product, [])
-            rec_str = "\n".join([f"• {x}" for x in recs])
-            return f"🧋 Với **{selected_product}**, quán gợi ý nên dùng kèm:\n\n{rec_str}"
+        recs = TOPPING_RECOMMENDATIONS.get(selected_product, [])
+        rec_str = ", ".join(recs) if recs else "Không có gợi ý riêng"
 
-    if any(x in q for x in ["menu", "danh sách", "có những loại"]):
-        text = "🧋 **Menu quán hiện tại:**\n\n"
+        return (
+            f"🧋 **Thông tin món: {selected_product}**\n\n"
+            f"• **Giá niêm yết (Size S):** {format_money(price)}\n"
+            f"• **Size M:** {format_money(price + 5000)} | **Size L:** {format_money(price + 10000)}\n"
+            f"• **Topping khuyên dùng:** {rec_str}"
+        )
+
+    # Hỏi Menu / Topping chung
+    if any(x in q for x in ["menu", "danh sách", "có những loại", "món gì"]):
+        text = "🧋 **MENU QUÁN TRÀ SỮA:**\n\n"
         for name, price in MENU.items():
-            text += f"• {name}: {format_money(price)}\n"
+            text += f"• {name}: **{format_money(price)}**\n"
+        text += "\n🍡 **TOPPING:**\n"
+        for name, price in TOPPINGS.items():
+            text += f"• {name}: +{format_money(price)}\n"
         return text
 
-    return None
-
-
-def ask_ai(question):
-    """Gọi OpenRouter AI API. Nếu gặp lỗi sẽ tự động fallback về Rule-based."""
-    rule_ans = rule_based_answer(question)
-
-    menu_text = "\n".join(f"- {k}: {v:,} VNĐ" for k, v in MENU.items())
-    topping_text = "\n".join(f"- {k}: {v:,} VNĐ" for k, v in TOPPINGS.items())
-    size_text = "\n".join(
-        f"- Size {k}: +{v:,} VNĐ" for k, v in SIZE_PRICE.items()
+    # Câu trả lời mặc định khi không khớp từ khóa
+    return (
+        "🤖 Cảm ơn bạn đã đặt câu hỏi! Tôi có thể tư vấn các thông tin sau:\n"
+        "- **Menu & Giá cả** (VD: *Cho xem menu*, *Trà sữa matcha giá bao nhiêu?*)\n"
+        "- **Gợi ý món** (VD: *Món nào đắt nhất?*, *Tôi thích uống ít ngọt*)\n"
+        "- **Tư vấn ngân sách** (VD: *Tôi có 50k nên uống gì?*)"
     )
-
-    system_prompt = f"""
-Bạn là AI chatbot tư vấn bán hàng cho quán trà sữa tại Việt Nam.
-
-Nhiệm vụ:
-- Tư vấn menu, giá cả, topping, size.
-- Gợi ý đồ uống phù hợp với sở thích khách hàng.
-- Trả lời thân thiện, ngắn gọn, lịch sự, đúng sự thật.
-- Chỉ sử dụng bảng giá chính xác dưới đây:
-
-MENU:
-{menu_text}
-
-TOPPING:
-{topping_text}
-
-SIZE PHỤ THU:
-{size_text}
-
-GỢI Ý TOPPING:
-{TOPPING_RECOMMENDATIONS}
-
-NHÓM VỊ:
-- Ngọt nổi bật: {SWEET_DRINKS}
-- Ngọt vừa: {MEDIUM_SWEET_DRINKS}
-- Thanh nhẹ: {LIGHT_DRINKS}
-"""
-
-    messages = [{"role": "system", "content": system_prompt}]
-    for msg in st.session_state.ai_messages[-8:]:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": question})
-
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://streamlit.io",
-        "X-Title": "Tra Sua App",
-    }
-
-    payload = {
-        "model": AI_MODEL,
-        "messages": messages,
-        "temperature": 0.5,
-        "max_tokens": 500,
-    }
-
-    try:
-        response = requests.post(
-            OPENROUTER_URL, headers=headers, json=payload, timeout=15
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-        else:
-            if rule_ans:
-                return rule_ans
-            return f"❌ Lỗi API OpenRouter ({response.status_code}): Vui lòng kiểm tra lại Key hoặc Model."
-    except Exception as e:
-        if rule_ans:
-            return rule_ans
-        return f"❌ Không thể kết nối AI: {str(e)}"
 
 
 # ============================================================
@@ -336,15 +282,15 @@ NHÓM VỊ:
 # ============================================================
 
 st.markdown(
-    '<div class="main-title">🧋 TRÀ SỮA - HÓA ĐƠN & AI CHATBOT</div>',
+    '<div class="main-title">🧋 TRÀ SỮA - HÓA ĐƠN & CHATBOT TƯ VẤN</div>',
     unsafe_allow_html=True,
 )
 st.markdown(
-    '<div class="sub-title">Tính hóa đơn • Thanh toán • AI tư vấn đặt món</div>',
+    '<div class="sub-title">Tính hóa đơn • Thanh toán • Trợ lý tư vấn đặt món</div>',
     unsafe_allow_html=True,
 )
 
-tab1, tab2 = st.tabs(["🧾 TÍNH HÓA ĐƠN", "🤖 AI CHATBOT"])
+tab1, tab2 = st.tabs(["🧾 TÍNH HÓA ĐƠN", "💬 TRỢ LÝ TƯ VẤN"])
 
 
 # ============================================================
@@ -447,7 +393,6 @@ with tab1:
                     st.write(f"{item['unit_price']:,} đ/ly")
 
                 with cd:
-                    st.write(f"**{item['total']:,} đ**")
                     if st.button("🗑️ Xóa", key=f"delete_{i}"):
                         st.session_state.cart.pop(i)
                         st.rerun()
@@ -531,8 +476,8 @@ with tab1:
 
         # FILE TEXT DOWNLOAD
         bill_text = f"================================\n"
-        bill_text += f"         QUÁN TRÀ SỮA\n"
-        bill_text += f"      HÓA ĐƠN THANH TOÁN\n"
+        bill_text += f"          QUÁN TRÀ SỮA\n"
+        bill_text += f"       HÓA ĐƠN THANH TOÁN\n"
         bill_text += f"================================\n"
         bill_text += f"Khách hàng: {customer_name}\n"
         bill_text += f"Thời gian: {bill_time}\n"
@@ -564,16 +509,16 @@ with tab1:
 
 
 # ============================================================
-# TAB 2 - AI CHATBOT
+# TAB 2 - CHATBOT TƯ VẤN
 # ============================================================
 
 with tab2:
-    st.subheader("🤖 AI Chatbot tư vấn trà sữa")
+    st.subheader("💬 Trợ lý Chatbot tư vấn chọn món")
 
     st.markdown(
         """
         <div class="ai-box">
-            🤖 Chatbot hỗ trợ tư vấn menu, gợi ý vị trà sữa và cách chọn topping phù hợp theo sở thích của bạn!
+            🤖 Chatbot tự động tư vấn menu, giá cả, gợi ý món theo sở thích và ngân sách của bạn mà không cần kết nối mạng bên ngoài!
         </div>
         """,
         unsafe_allow_html=True,
@@ -582,7 +527,7 @@ with tab2:
     st.divider()
 
     # GỢI Ý CÂU HỎI
-    st.markdown("### 💡 Gợi ý câu hỏi")
+    st.markdown("### 💡 Gợi ý câu hỏi nhanh")
     suggestions = [
         "Trà sữa nào đắt nhất?",
         "Tôi thích uống ngọt thì nên chọn gì?",
@@ -597,15 +542,14 @@ with tab2:
         with cols[i % 3]:
             if st.button(
                 suggestion,
-                key=f"ai_suggestion_{i}",
+                key=f"suggestion_{i}",
                 use_container_width=True,
             ):
-                st.session_state.ai_messages.append(
+                st.session_state.chat_messages.append(
                     {"role": "user", "content": suggestion}
                 )
-                with st.spinner("🤖 AI đang suy nghĩ..."):
-                    answer = ask_ai(suggestion)
-                st.session_state.ai_messages.append(
+                answer = ask_chatbot(suggestion)
+                st.session_state.chat_messages.append(
                     {"role": "assistant", "content": answer}
                 )
                 st.rerun()
@@ -613,34 +557,28 @@ with tab2:
     st.divider()
 
     # LỊCH SỬ CHAT
-    for message in st.session_state.ai_messages:
+    for message in st.session_state.chat_messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
     # INPUT CHAT
-    if user_question := st.chat_input("Nhập câu hỏi cho AI..."):
-        st.session_state.ai_messages.append(
+    if user_question := st.chat_input("Nhập câu hỏi cho Chatbot..."):
+        st.session_state.chat_messages.append(
             {"role": "user", "content": user_question}
         )
-        with st.chat_message("user"):
-            st.markdown(user_question)
-
-        with st.chat_message("assistant"):
-            with st.spinner("🤖 AI đang trả lời..."):
-                answer = ask_ai(user_question)
-                st.markdown(answer)
-
-        st.session_state.ai_messages.append(
+        answer = ask_chatbot(user_question)
+        st.session_state.chat_messages.append(
             {"role": "assistant", "content": answer}
         )
+        st.rerun()
 
     # XÓA LỊCH SỬ CHAT
-    if st.session_state.ai_messages:
+    if st.session_state.chat_messages:
         st.write("")
         if st.button(
-            "🗑️️ Xóa lịch sử trò chuyện", key="clear_ai_chat_btn"
+            "🗑 Xóa lịch sử trò chuyện", key="clear_chat_btn"
         ):
-            st.session_state.ai_messages = []
+            st.session_state.chat_messages = []
             st.rerun()
 
 
@@ -651,7 +589,7 @@ with tab2:
 st.markdown(
     """
     <div class="footer">
-        🧋 Hệ thống Quản lý Hóa đơn & AI Chatbot Trà Sữa
+        🧋 Hệ thống Quản lý Hóa đơn & Chatbot Tư Vấn Trà Sữa
     </div>
     """,
     unsafe_allow_html=True,
