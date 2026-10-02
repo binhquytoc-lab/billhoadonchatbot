@@ -10,6 +10,11 @@ from openai import OpenAI
 # ----------------------------------------------------------------------------
 st.set_page_config(page_title="Quán Trà Sữa - Tính Hoá Đơn", page_icon="🧋", layout="wide")
 
+# API key được gắn cứng trong code, không cần nhập trên giao diện.
+# Nếu gặp lỗi 401, hãy tạo key mới tại https://openrouter.ai/keys và thay vào dòng dưới.
+OPENROUTER_API_KEY = "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"
+AI_MODEL = "openai/gpt-4o-mini"
+
 SHOP_NAME = "TRÀ SỮA HANOI VIBES"
 SHOP_ADDRESS = "123 Phố Huế, Hai Bà Trưng, Hà Nội"
 SHOP_PHONE = "0123 456 789"
@@ -106,16 +111,8 @@ def build_invoice_text(order: dict) -> str:
 
 
 def get_api_key() -> str:
-    """Ưu tiên: ô nhập ở sidebar -> st.secrets -> biến môi trường."""
-    key = st.session_state.get("api_key_input", "").strip()
-    if key:
-        return key
-    try:
-        if "OPENROUTER_API_KEY" in st.secrets:
-            return st.secrets["OPENROUTER_API_KEY"]
-    except Exception:
-        pass
-    return os.getenv("OPENROUTER_API_KEY", "")
+    """Dùng key gắn cứng trong code; nếu để trống thì thử biến môi trường."""
+    return OPENROUTER_API_KEY.strip() or os.getenv("OPENROUTER_API_KEY", "")
 
 
 def build_system_prompt() -> str:
@@ -164,13 +161,7 @@ init_state()
 
 with st.sidebar:
     st.title("⚙️ Cài đặt")
-    st.text_input(
-        "OpenRouter API Key",
-        type="password",
-        key="api_key_input",
-        help="Hoặc đặt OPENROUTER_API_KEY trong .streamlit/secrets.toml / biến môi trường.",
-    )
-    model = st.text_input("Model AI", value="openai/gpt-4o-mini")
+    model = st.text_input("Model AI", value=AI_MODEL)
     st.caption("Xem danh sách model tại openrouter.ai/models")
     st.divider()
     st.metric("Số hoá đơn đã xuất", len(st.session_state.history))
@@ -357,7 +348,7 @@ with tab_chat:
         api_key = get_api_key()
         with st.chat_message("assistant"):
             if not api_key:
-                reply = "⚠️ Chưa có API key. Hãy nhập OpenRouter API Key ở thanh bên trái."
+                reply = "⚠️ Chưa có API key. Hãy điền key vào biến OPENROUTER_API_KEY ở đầu file app.py."
                 st.markdown(reply)
             else:
                 try:
